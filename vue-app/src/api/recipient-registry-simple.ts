@@ -1,5 +1,5 @@
 import { Contract, Event } from 'ethers'
-import { isAddress } from '@ethersproject/address'
+import { isHexString } from '@ethersproject/bytes'
 
 import { SimpleRecipientRegistry } from './abi'
 import { provider, ipfsGatewayUrl } from './core'
@@ -9,7 +9,7 @@ function decodeRecipientAdded(event: Event): Project {
   const args = event.args as any
   const metadata = JSON.parse(args._metadata)
   return {
-    id: args._recipient,
+    id: args._recipientId,
     address: args._recipient,
     name: metadata.name,
     description: metadata.description,
@@ -22,12 +22,12 @@ function decodeRecipientAdded(event: Event): Project {
 
 export async function getProjects(
   registryAddress: string,
-  startBlock?: number,
-  endBlock?: number,
+  startTime?: number,
+  endTime?: number,
 ): Promise<Project[]> {
   const registry = new Contract(registryAddress, SimpleRecipientRegistry, provider)
   const recipientAddedFilter = registry.filters.RecipientAdded()
-  const recipientAddedEvents = await registry.queryFilter(recipientAddedFilter, 0, endBlock)
+  const recipientAddedEvents = await registry.queryFilter(recipientAddedFilter, 0)
   const recipientRemovedFilter = registry.filters.RecipientRemoved()
   const recipientRemovedEvents = await registry.queryFilter(recipientRemovedFilter, 0)
   const projects: Project[] = []
@@ -39,18 +39,26 @@ export async function getProjects(
       // Invalid metadata
       continue
     }
+    const addedAt = (event.args as any)._timestamp.toNumber()
+    if (endTime && addedAt >= endTime) {
+      // Hide recipient if it is added after the end of round
+      project.isHidden = true
+    }
     const removed = recipientRemovedEvents.find((event) => {
-      return (event.args as any)._recipient === project.id
+      return (event.args as any)._recipientId === project.id
     })
     if (removed) {
-      if (!startBlock || startBlock && removed.blockNumber <= startBlock) {
-        // Start block not specified
-        // or recipient had been removed before start block
+      const removedAt = (removed.args as any)._timestamp.toNumber()
+      if (!startTime || removedAt <= startTime) {
+        // Start time not specified
+        // or recipient had been removed before start time
         project.isHidden = true
       } else {
+        // Disallow contributions to removed recipient, but don't hide it
         project.isLocked = true
       }
     }
+    // TODO: set isHidden to 'true' if project replaces removed project during the round
     projects.push(project)
   }
   return projects
@@ -58,15 +66,16 @@ export async function getProjects(
 
 export async function getProject(
   registryAddress: string,
-  recipientAddress: string,
+  recipientId: string,
 ): Promise<Project | null> {
-  if (!isAddress(recipientAddress)) {
+  if (!isHexString(recipientId, 32)) {
     return null
   }
   const registry = new Contract(registryAddress, SimpleRecipientRegistry, provider)
-  const recipientAddedFilter = registry.filters.RecipientAdded(recipientAddress)
+  const recipientAddedFilter = registry.filters.RecipientAdded(recipientId)
   const recipientAddedEvents = await registry.queryFilter(recipientAddedFilter, 0)
   if (recipientAddedEvents.length !== 1) {
+    // Project does not exist
     return null
   }
   let project
@@ -76,11 +85,14 @@ export async function getProject(
     // Invalid metadata
     return null
   }
-  const recipientRemovedFilter = registry.filters.RecipientRemoved(recipientAddress)
+  const recipientRemovedFilter = registry.filters.RecipientRemoved(recipientId)
   const recipientRemovedEvents = await registry.queryFilter(recipientRemovedFilter, 0)
   if (recipientRemovedEvents.length !== 0) {
+    // Disallow contributions to removed recipient
     project.isLocked = true
   }
+  // TODO: set isHidden to 'true' if project was removed before the beginning of the round
+  // TODO: set isHidden to 'true' if project was added after the end of round
   return project
 }
 

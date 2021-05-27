@@ -50,7 +50,7 @@
           <div class="unit" v-if="contributionTimeLeft.days === 0">minutes</div>
         </div>
       </div>
-      <div v-if="currentRound.status === 'Reallocating'" class="round-info-item">
+      <div v-if="currentRound.status === 'Reallocating' || currentRound.status === 'Tallying'" class="round-info-item">
         <div class="round-info-title">Time left to reallocate</div>
         <div
           class="round-info-value"
@@ -65,6 +65,7 @@
         </div>
       </div>
     </div>
+    <div v-if="isLoading" class="loader"></div>
     <div v-if="projects.length > 0" class="project-search">
       <img src="@/assets/search.svg">
       <input
@@ -92,20 +93,21 @@ import Component from 'vue-class-component'
 import { FixedNumber } from 'ethers'
 import { DateTime } from 'luxon'
 
-import { RoundInfo } from '@/api/round'
-import { Project, getProjects } from '@/api/projects'
+import { RoundInfo, getCurrentRound } from '@/api/round'
+import { Project, getRecipientRegistryAddress, getProjects } from '@/api/projects'
 
 import ProjectListItem from '@/components/ProjectListItem.vue'
 import MatchingFundsModal from '@/components/MatchingFundsModal.vue'
 import {
+  SELECT_ROUND,
   LOAD_ROUND_INFO,
   LOAD_USER_INFO,
   LOAD_CART,
-  UNWATCH_CART,
   LOAD_CONTRIBUTOR_DATA,
-  UNWATCH_CONTRIBUTOR_DATA,
 } from '@/store/action-types'
-import { SET_CURRENT_ROUND_ADDRESS } from '@/store/mutation-types'
+import {
+  SET_RECIPIENT_REGISTRY_ADDRESS,
+} from '@/store/mutation-types'
 
 const SHUFFLE_RANDOM_SEED = Math.random()
 
@@ -150,55 +152,44 @@ export default class ProjectList extends Vue {
 
   projects: Project[] = []
   search = ''
+  isLoading = true
 
-  roundWatcherStop?: Function
-
-  get currentRound(): RoundInfo | null {
-    return this.$store.state.currentRound
-  }
-
-  created() {
-    const roundAddress = this.$route.params.address || null
+  async created() {
+    const roundAddress = this.$route.params.address || this.$store.state.currentRoundAddress || await getCurrentRound()
     if (roundAddress && roundAddress !== this.$store.state.currentRoundAddress) {
-      // Change current round and reload round info
-      this.$store.dispatch(UNWATCH_CART)
-      this.$store.dispatch(UNWATCH_CONTRIBUTOR_DATA)
-      this.$store.commit(SET_CURRENT_ROUND_ADDRESS, roundAddress)
-      ;(async () => {
-        await this.$store.dispatch(LOAD_ROUND_INFO)
-        if (this.$store.state.currentUser) {
-          // Reload user data when switching between rounds
-          this.$store.dispatch(LOAD_USER_INFO)
-          this.$store.dispatch(LOAD_CART)
-          this.$store.dispatch(LOAD_CONTRIBUTOR_DATA)
-        }
-      })()
+      // Select round and (re)load round info
+      this.$store.dispatch(SELECT_ROUND, roundAddress)
+      await this.$store.dispatch(LOAD_ROUND_INFO)
+      if (this.$store.state.currentUser) {
+        // Load user data if already logged in
+        this.$store.dispatch(LOAD_USER_INFO)
+        this.$store.dispatch(LOAD_CART)
+        this.$store.dispatch(LOAD_CONTRIBUTOR_DATA)
+      }
     }
-
-    // Wait for round info to load and get project list
-    this.roundWatcherStop = this.$store.watch(
-      (state) => state.currentRound?.fundingRoundAddress,
-      this.loadProjects,
-    )
-    this.loadProjects()
-  }
-
-  beforeDestroy() {
-    if (this.roundWatcherStop) {
-      this.roundWatcherStop()
+    if (this.$store.state.recipientRegistryAddress === null) {
+      const registryAddress = await getRecipientRegistryAddress(roundAddress)
+      this.$store.commit(SET_RECIPIENT_REGISTRY_ADDRESS, registryAddress)
     }
+    await this.loadProjects()
+    this.isLoading = false
   }
 
   private async loadProjects() {
     const projects = await getProjects(
-      this.currentRound?.startBlock,
-      this.currentRound?.endBlock,
+      this.$store.state.recipientRegistryAddress,
+      this.currentRound?.startTime.toSeconds(),
+      this.currentRound?.votingDeadline.toSeconds(),
     )
     const visibleProjects = projects.filter(project => {
       return (!project.isHidden && !project.isLocked)
     })
     shuffleArray(visibleProjects)
     this.projects = visibleProjects
+  }
+
+  get currentRound(): RoundInfo | null {
+    return this.$store.state.currentRound
   }
 
   formatIntegerPart(value: FixedNumber): string {
@@ -210,7 +201,7 @@ export default class ProjectList extends Vue {
   }
 
   formatFractionalPart(value: FixedNumber): string {
-    return value._value === '0.0' ? '' : value.toString().split('.')[1]
+    return value._value === '0.0' ? '' : value.round(2).toString().split('.')[1]
   }
 
   formatDate(value: DateTime): string {

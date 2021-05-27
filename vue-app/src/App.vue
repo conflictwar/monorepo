@@ -19,6 +19,7 @@
       <div id="nav-menu">
         <router-link to="/">Projects</router-link>
         <router-link to="/rounds">Rounds</router-link>
+        <router-link to="/recipients" v-if="hasRecipientRegistryLink()">Registry</router-link>
         <router-link to="/about">About</router-link>
         <a href="https://blog.clr.fund" target=_blank>Blog</a>
         <a href="https://forum.clr.fund" target=_blank>Forum</a>
@@ -40,17 +41,12 @@ import Vue from 'vue'
 import Component from 'vue-class-component'
 import { Watch } from 'vue-property-decorator'
 
-import { getCurrentRound } from '@/api/round'
+import { recipientRegistryType } from '@/api/core'
 import Cart from '@/components/Cart.vue'
 import Profile from '@/components/Profile.vue'
-import { SET_CURRENT_ROUND_ADDRESS } from '@/store/mutation-types'
 import {
   LOAD_USER_INFO,
   LOAD_ROUND_INFO,
-  LOAD_CART,
-  UNWATCH_CART,
-  LOAD_CONTRIBUTOR_DATA,
-  UNWATCH_CONTRIBUTOR_DATA,
 } from '@/store/action-types'
 
 @Component({
@@ -74,24 +70,7 @@ export default class App extends Vue {
   navBarCollapsed = true
   userBarCollapsed = true
 
-  async created() {
-    const currentRoundAddress = await getCurrentRound()
-    if (this.$store.state.currentRoundAddress === null) {
-      // Set round address on init, but only if necessary.
-      // ProjectList component could have already set it.
-      this.$store.dispatch(UNWATCH_CART)
-      this.$store.dispatch(UNWATCH_CONTRIBUTOR_DATA)
-      this.$store.commit(SET_CURRENT_ROUND_ADDRESS, currentRoundAddress)
-      ;(async () => {
-        await this.$store.dispatch(LOAD_ROUND_INFO)
-        if (this.$store.state.currentUser) {
-          // Load user data if already logged in
-          this.$store.dispatch(LOAD_USER_INFO)
-          this.$store.dispatch(LOAD_CART)
-          this.$store.dispatch(LOAD_CONTRIBUTOR_DATA)
-        }
-      })()
-    }
+  created() {
     setInterval(() => {
       this.$store.dispatch(LOAD_ROUND_INFO)
     }, 60 * 1000)
@@ -114,6 +93,10 @@ export default class App extends Vue {
   onNavigation() {
     this.navBarCollapsed = true
     this.userBarCollapsed = true
+  }
+
+  hasRecipientRegistryLink(): boolean {
+    return recipientRegistryType === 'optimistic'
   }
 }
 </script>
@@ -141,6 +124,10 @@ a {
   text-decoration: none;
 }
 
+summary:focus {
+  outline: none;
+}
+
 .input {
   background-color: $bg-light-color;
   border: 2px solid $button-color;
@@ -148,6 +135,7 @@ a {
   box-sizing: border-box;
   color: $text-color;
   font-family: Inter, sans-serif;
+  font-size: 14px;
   padding: 7px;
 
   &.invalid {
@@ -294,21 +282,11 @@ a {
   width: 25%;
 }
 
-.vm--modal {
-  background-color: transparent !important;
-}
-
-.modal-body {
-  background-color: $bg-light-color;
-  padding: $modal-space;
-  text-align: center;
-}
-
 .loader {
   display: block;
-  width: 40px;
   height: 40px;
-  margin: $modal-space auto;
+  margin: $content-space auto;
+  width: 40px;
 }
 
 .loader:after {
@@ -321,6 +299,20 @@ a {
   border: 6px solid #fff;
   border-color: #fff transparent #fff transparent;
   animation: loader 1.2s linear infinite;
+}
+
+.vm--modal {
+  background-color: transparent !important;
+}
+
+.modal-body {
+  background-color: $bg-light-color;
+  padding: $modal-space;
+  text-align: center;
+
+  .loader {
+    margin: $modal-space auto;
+  }
 }
 
 @keyframes loader {

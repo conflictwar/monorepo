@@ -3,4 +3,6 @@ cache
 node_modules
 snark-params
 state.json
+proofs.json
 tally.json
+.env

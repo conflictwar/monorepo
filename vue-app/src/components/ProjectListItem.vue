@@ -13,7 +13,7 @@
       >
         {{ project.name }}
       </router-link>
-      <div class="project-description">{{ project.description }}</div>
+      <div class="project-description" v-html="descriptionHtml"></div>
       <button
         v-if="hasRegisterBtn()"
         class="btn"
@@ -49,15 +49,21 @@ import { DateTime } from 'luxon'
 import { DEFAULT_CONTRIBUTION_AMOUNT, CartItem } from '@/api/contributions'
 import { recipientRegistryType } from '@/api/core'
 import { Project, getProject } from '@/api/projects'
+import { RoundStatus } from '@/api/round'
 import { TcrItemStatus } from '@/api/recipient-registry-kleros'
-import KlerosGTCRAdapterModal from '@/components/KlerosGTCRAdapterModal.vue'
+import RecipientRegistrationModal from '@/components/RecipientRegistrationModal.vue'
 import { SAVE_CART } from '@/store/action-types'
 import { ADD_CART_ITEM } from '@/store/mutation-types'
+import { markdown } from '@/utils/markdown'
 
 @Component
 export default class ProjectListItem extends Vue {
   @Prop()
   project!: Project;
+
+  get descriptionHtml(): string {
+    return markdown.renderInline(this.project.description)
+  }
 
   get inCart(): boolean {
     const index = this.$store.state.cart.findIndex((item: CartItem) => {
@@ -68,11 +74,16 @@ export default class ProjectListItem extends Vue {
   }
 
   hasRegisterBtn(): boolean {
-    return (
-      recipientRegistryType === 'kleros' &&
-      this.project.index === 0 &&
-      this.project.extra.tcrItemStatus === TcrItemStatus.Registered
-    )
+    if (recipientRegistryType === 'optimistic') {
+      return this.project.index === 0
+    }
+    else if (recipientRegistryType === 'kleros') {
+      return (
+        this.project.index === 0 &&
+        this.project.extra.tcrItemStatus === TcrItemStatus.Registered
+      )
+    }
+    return false
   }
 
   canRegister(): boolean  {
@@ -81,15 +92,16 @@ export default class ProjectListItem extends Vue {
 
   register() {
     this.$modal.show(
-      KlerosGTCRAdapterModal,
+      RecipientRegistrationModal,
       { project: this.project },
       { },
       {
         closed: async () => {
-          const project = await getProject(this.project.id)
-          if (project) {
-            this.project.index = project.index
-          }
+          const project = await getProject(
+            this.$store.state.recipientRegistryAddress,
+            this.project.id,
+          )
+          Object.assign(this.project, project)
         },
       },
     )
@@ -105,7 +117,9 @@ export default class ProjectListItem extends Vue {
       this.$store.state.currentUser &&
       this.$store.state.currentRound &&
       DateTime.local() < this.$store.state.currentRound.votingDeadline &&
-      !this.project.isLocked
+      this.$store.state.currentRound.status !== RoundStatus.Cancelled &&
+      this.project.isHidden === false &&
+      this.project.isLocked === false
     )
   }
 

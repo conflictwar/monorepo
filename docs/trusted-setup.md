@@ -2,20 +2,23 @@
 
 ## How to verify the correctness of execution?
 
-Clone the [MACI repo](https://github.com/appliedzkp/maci/) and switch to version v0.5.7:
+### Verify using MACI CLI
+
+Clone the [MACI repo](https://github.com/appliedzkp/maci/) and switch to version v0.7.1:
 
 ```
 git clone https://github.com/appliedzkp/maci.git
-git checkout v0.5.7
+cd maci/
+git checkout v0.7.1
 ```
 
 Follow instructions in README.md to install necessary dependencies.
 
-Download trusted setup files into `circuits/params/` directory and rebuild the keys:
+Download [zkSNARK parameters](https://gateway.pinata.cloud/ipfs/QmRzp3vkFPNHPpXiu7iKpPqVnZB97wq7gyih2mp6pa5bmD) for 'medium' circuits into `circuits/params/` directory and rebuild the keys:
 
 ```
 cd circuits
-./scripts/buildSnarksSmall.sh
+./scripts/buildSnarksMedium.sh
 ```
 
 Recompile the contracts:
@@ -32,4 +35,28 @@ cd ../cli
 node build/index.js verify -t tally.json
 ```
 
+### Verify using clrfund scripts
 
+Switch to `contracts` directory:
+
+```
+cd contracts/
+```
+
+Download [zkSNARK parameters](https://gateway.pinata.cloud/ipfs/QmRzp3vkFPNHPpXiu7iKpPqVnZB97wq7gyih2mp6pa5bmD) for 'medium' circuits to `snark-params` directory. Example:
+
+```
+ipfs get --output snark-params QmRzp3vkFPNHPpXiu7iKpPqVnZB97wq7gyih2mp6pa5bmD
+```
+
+Set the path to downloaded parameter files:
+
+```
+export NODE_CONFIG='{"snarkParamsPath": "../../../contracts/snark-params/"}'
+```
+
+Verify:
+
+```
+yarn ts-node scripts/verify.ts tally.json
+```

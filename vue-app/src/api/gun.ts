@@ -3,7 +3,7 @@
 import Gun from 'gun/gun'
 import 'gun/sea'
 
-import { gunApiUrl } from './core'
+import { gunPeers } from './core'
 import { LOGIN_MESSAGE } from './user'
 import { md5 } from '@/utils/crypto'
 
@@ -12,9 +12,7 @@ interface GunSchema {
 }
 
 const db = Gun<GunSchema>({
-  peers: [
-    gunApiUrl,
-  ],
+  peers: gunPeers,
 })
 const user = db.user() as any
 
@@ -58,12 +56,8 @@ export function setValue(key: string, value: string): void {
 export async function getValue(key: string): Promise<string | null> {
   return await new Promise<string | null>((resolve) => {
     // WARNING: once() may not work correctly after on() and off()
-    user.get('data').get(key).once((node) => {
-      if (node) {
-        resolve(node)
-      } else {
-        resolve(null)
-      }
+    user.get('data').get(key).once((value) => {
+      resolve(value)
     })
   })
 }

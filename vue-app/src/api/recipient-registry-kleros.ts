@@ -65,8 +65,8 @@ function decodeRecipientAdded(event: Event, columns: TcrColumn[]): Project {
 
 export async function getProjects(
   registryAddress: string,
-  startBlock?: number,
-  endBlock?: number,
+  startTime?: number,
+  endTime?: number,
 ): Promise<Project[]> {
   const registry = new Contract(registryAddress, KlerosGTCRAdapter, provider)
   const tcrAddress = await registry.tcr()
@@ -79,27 +79,30 @@ export async function getProjects(
   const projects: Project[] = []
   for (const event of recipientAddedEvents) {
     const project = decodeRecipientAdded(event, tcrColumns)
-    if (endBlock && event.blockNumber >= endBlock) {
-      // Skip recipients added after the end of round.
-      // We can not do this with filter because on xDai node returns
-      // "One of the blocks specified in filter ... cannot be found"
+    const addedAt = (event.args as any)._timestamp.toNumber()
+    if (endTime && addedAt >= endTime) {
+      // Hide recipient if it is added after the end of round.
       project.isHidden = true
     }
     const removed = recipientRemovedEvents.find((event) => {
       return (event.args as any)._tcrItemId === project.id
     })
     if (removed) {
-      if (!startBlock || startBlock && removed.blockNumber <= startBlock) {
-        // Start block not specified
-        // or recipient had been removed before start block
+      const removedAt = (removed.args as any)._timestamp.toNumber()
+      if (!startTime || removedAt <= startTime) {
+        // Start time not specified
+        // or recipient had been removed before start time
         project.isHidden = true
       } else {
+        // Disallow contributions to removed recipient, but don't hide it
         project.isLocked = true
       }
     }
     projects.push(project)
   }
-  // Search for unregistered recipients
+  // Search for unregistered recipients.
+  // Unregistered recipients are always visible,
+  // even if item is submitted after the end of round.
   const tcrItemSubmittedFilter = tcr.filters.ItemSubmitted()
   const tcrItemSubmittedEvents = await tcr.queryFilter(tcrItemSubmittedFilter, 0)
   for (const event of tcrItemSubmittedEvents) {
@@ -164,6 +167,7 @@ export async function getProject(
   const recipientRemovedFilter = registry.filters.RecipientRemoved(recipientId)
   const recipientRemovedEvents = await registry.queryFilter(recipientRemovedFilter, 0)
   if (recipientRemovedEvents.length !== 0) {
+    // Disallow contributions to removed recipient
     project.isLocked = true
   }
   return project
@@ -179,4 +183,4 @@ export async function registerProject(
   return transaction
 }
 
-export default { getProjects, getProject }
+export default { getProjects, getProject, registerProject }

@@ -1,11 +1,15 @@
 import fs from 'fs';
 import path from 'path';
+import dotenv from 'dotenv'
 
 import { HardhatUserConfig, task } from 'hardhat/config'
 import '@nomiclabs/hardhat-waffle'
 import '@nomiclabs/hardhat-ganache'
 
+dotenv.config()
+
 const GAS_LIMIT = 10000000
+const WALLET_MNEMONIC = process.env.WALLET_MNEMONIC || '';
 
 const config: HardhatUserConfig = {
   networks: {
@@ -14,7 +18,7 @@ const config: HardhatUserConfig = {
       blockGasLimit: GAS_LIMIT,
     },
     localhost: {
-      url: "http://127.0.0.1:18545"
+      url: 'http://127.0.0.1:18545',
     },
     ganache: {
       // Workaround for https://github.com/nomiclabs/hardhat/issues/518
@@ -22,21 +26,21 @@ const config: HardhatUserConfig = {
       gasLimit: GAS_LIMIT,
     } as any,
     rinkeby: {
-      url: process.env.ETHEREUM_JSONRPC_HTTP_URL || 'http://127.0.0.1:8545',
-      accounts: { mnemonic: '' },
+      url: process.env.RINKEBY_JSONRPC_HTTP_URL || 'http://127.0.0.1:8545',
+      accounts: { mnemonic: WALLET_MNEMONIC },
     },
     xdai: {
-      url: 'https://rpc.xdaichain.com',
+      url: process.env.XDAI_JSONRPC_HTTP_URL || 'https://rpc.xdaichain.com',
       timeout: 60000,
-      accounts: { mnemonic: '' },
+      accounts: { mnemonic: WALLET_MNEMONIC },
     },
   },
   paths: {
-    artifacts: "build/contracts",
-    tests: "tests"
+    artifacts: 'build/contracts',
+    tests: 'tests',
   },
   solidity: {
-    version: "0.6.12",
+    version: '0.6.12',
     settings: {
       optimizer: {
         enabled: true,

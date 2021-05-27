@@ -1,13 +1,14 @@
 import { BigNumber, Contract } from 'ethers'
 import { TransactionResponse } from '@ethersproject/abstract-provider'
 
-export async function getGasUsage(transaction: TransactionResponse): Promise<number | null> {
+export async function getGasUsage(transaction: TransactionResponse): Promise<number> {
   const receipt = await transaction.wait()
-  if (receipt.status === 1) {
-    return (receipt.gasUsed as BigNumber).toNumber()
-  } else {
-    return null
-  }
+  return receipt.gasUsed.toNumber()
+}
+
+export async function getTxFee(transaction: TransactionResponse): Promise<BigNumber> {
+  const receipt = await transaction.wait()
+  return receipt.gasUsed.mul(transaction.gasPrice)
 }
 
 export async function getEventArg(
